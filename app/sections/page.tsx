@@ -1,44 +1,110 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "../../lib/auth";
-import { supabase } from "../../lib/supabase";
-import Sidebar from "../../components/Sidebar";
-import { useI18n } from "../../lib/i18n";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
+import Sidebar from "@/components/Sidebar";
+
 export default function SectionsPage() {
   const { user, loading } = useAuth();
-  const { t } = useI18n();
   const router = useRouter();
-  const [stats, setStats] = useState<any[]>([]);
-  useEffect(() => { if (!loading && !user) router.push("/login"); }, [user, loading, router]);
-  useEffect(() => { if (user) loadData(); }, [user]);
-  async function loadData() { let q = supabase.from("employees").select("*, sections(name)").eq("is_approved", true); if (user?.role === "section_manager" && user.section_id) q = q.eq("section_id", user.section_id); const { data } = await q; if (data) { const m: Record<string, any> = {}; data.forEach((e: any) => { const sn = e.sections?.name || "Unknown"; if (!m[sn]) m[sn] = { name: sn, total: 0, active: 0, clockedIn: 0, onLeave: 0, absent: 0, suspended: 0, totalSalary: 0, totalPerf: 0 }; m[sn].total++; m[sn].totalSalary += e.gross_salary; m[sn].totalPerf += e.performance_score; if (e.status === "active") m[sn].active++; if (e.is_clocked_in) m[sn].clockedIn++; if (e.status === "on_leave") m[sn].onLeave++; if (e.status === "absent") m[sn].absent++; if (e.status === "suspended") m[sn].suspended++; }); setStats(Object.values(m).sort((a, b) => a.name.localeCompare(b.name))); } }
-  if (loading || !user) return null;
-  const fmt = (n: number) => new Intl.NumberFormat("tr-TR").format(n);
+  
+  const [sectionsData, setSectionsData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!loading && !user) router.push("/login");
+    if (user) fetchSections();
+  }, [user, loading, router]);
+
+  const fetchSections = async () => {
+    setIsLoading(true);
+    // We use the section_dashboard view we created in SQL to get live employee counts!
+    const { data, error } = await supabase
+      .from("section_dashboard")
+      .select("*")
+      .order("section_name", { ascending: true });
+      
+    if (error) {
+      console.error("Error fetching sections:", error);
+    } else {
+      setSectionsData(data || []);
+    }
+    setIsLoading(false);
+  };
+
+  if (loading || !user) return <div style={{ background: "#0c0f14", minHeight: "100vh" }} />;
+
+  // Group the data by Location
+  const beniSuefSections = sectionsData.filter(s => s.location === "Beni Suef");
+  const sadatCitySections = sectionsData.filter(s => s.location === "Sadat City");
+
+  const SectionCard = ({ section }: { section: any }) => (
+    <div style={{ background: "#13171e", border: "1px solid #252b38", borderRadius: 12, padding: 20, transition: "transform 0.2s", cursor: "pointer" }} 
+         onMouseOver={(e) => e.currentTarget.style.transform = "translateY(-2px)"}
+         onMouseOut={(e) => e.currentTarget.style.transform = "translateY(0)"}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 15 }}>
+        <h3 style={{ fontSize: 18, fontWeight: 600, color: "#fff", margin: 0 }}>{section.section_name}</h3>
+        <span style={{ background: "rgba(59, 130, 246, 0.1)", color: "#3b82f6", padding: "4px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>
+          {section.location}
+        </span>
+      </div>
+      
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 20 }}>
+        <div style={{ background: "#1a1f2a", padding: "12px", borderRadius: 8, border: "1px solid #252b38" }}>
+          <div style={{ fontSize: 11, color: "#8891a4", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Total Staff</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#e8eaf0" }}>{section.total_employees || 0}</div>
+        </div>
+        <div style={{ background: "#1a1f2a", padding: "12px", borderRadius: 8, border: "1px solid #252b38" }}>
+          <div style={{ fontSize: 11, color: "#8891a4", textTransform: "uppercase", fontWeight: 600, marginBottom: 4 }}>Active</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#10b981" }}>{section.active_count || 0}</div>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0c0f14", color: "#e8eaf0", fontFamily: "Outfit, sans-serif" }}>
       <Sidebar />
-      <main style={{ flex: 1, marginLeft: 240 }}>
-        <header style={{ padding: "18px 32px", borderBottom: "1px solid #252b38", background: "#13171e", position: "sticky", top: 0, zIndex: 50 }}>
-          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{t("sec.title")}</h1>
-          <p style={{ margin: "2px 0 0", color: "#5c6478", fontSize: 12 }}>{stats.length} {t("sec.departments")}</p>
-        </header>
-        <div style={{ padding: "28px 32px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-            {stats.map((s) => (
-              <div key={s.name} style={{ background: "#13171e", border: "1px solid #252b38", borderRadius: 14, padding: "22px 20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 18 }}><h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{s.name}</h3><div style={{ width: 10, height: 10, borderRadius: "50%", background: s.clockedIn > s.total * 0.7 ? "#22c55e" : s.clockedIn > s.total * 0.4 ? "#f59e0b" : "#ef4444" }} /></div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-                  <div><div style={{ color: "#5c6478", fontSize: 11 }}>{t("sec.total")}</div><div style={{ fontSize: 20, fontWeight: 700 }}>{s.total}</div></div>
-                  <div><div style={{ color: "#5c6478", fontSize: 11 }}>{t("sec.clocked_in")}</div><div style={{ fontSize: 20, fontWeight: 700, color: "#22c55e" }}>{s.clockedIn}</div></div>
-                  <div><div style={{ color: "#5c6478", fontSize: 11 }}>{t("att.on_leave")}</div><div style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b" }}>{s.onLeave}</div></div>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #252b38", fontSize: 12 }}><span style={{ color: "#5c6478" }}>{t("sec.avg_perf")}</span><span style={{ fontWeight: 600 }}>{s.total > 0 ? Math.round(s.totalPerf / s.total) : 0}%</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid #252b38", fontSize: 12 }}><span style={{ color: "#5c6478" }}>{t("sec.payroll")}</span><span style={{ fontWeight: 600 }}>TRY {fmt(s.totalSalary)}</span></div>
-              </div>
-            ))}
+      <main style={{ flex: 1, padding: "30px 40px", marginLeft: 240 }}>
+        
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>Factory Sections</h1>
+            <p style={{ color: "#8891a4", marginTop: 5, fontSize: 14 }}>Overview of departments across all locations</p>
           </div>
         </div>
+
+        {isLoading ? (
+          <div style={{ textAlign: "center", padding: 50, color: "#8891a4" }}>Loading sections...</div>
+        ) : (
+          <>
+            {/* BENI SUEF GRID */}
+            <div style={{ marginBottom: 40 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#3b82f6" }} />
+                <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Beni Suef Plant</h2>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
+                {beniSuefSections.map(section => <SectionCard key={section.section_id} section={section} />)}
+              </div>
+            </div>
+
+            <hr style={{ borderTop: "1px dashed #252b38", margin: "40px 0" }} />
+
+            {/* SADAT CITY GRID */}
+            <div style={{ marginBottom: 40 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                <div style={{ width: 12, height: 12, borderRadius: "50%", background: "#8b5cf6" }} />
+                <h2 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Sadat City Plant</h2>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 20 }}>
+                {sadatCitySections.map(section => <SectionCard key={section.section_id} section={section} />)}
+              </div>
+            </div>
+          </>
+        )}
+
       </main>
     </div>
   );
