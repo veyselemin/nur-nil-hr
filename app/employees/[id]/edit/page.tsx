@@ -63,8 +63,11 @@ export default function EditEmployeePage() {
     const sanitizedForm = { ...form };
     Object.keys(sanitizedForm).forEach(key => { if (sanitizedForm[key] === "") sanitizedForm[key] = null; });
 
-    // 1. Update Profile
-    const { error } = await supabase.from("employees").update(sanitizedForm).eq("id", id);
+    // Remove auto-generated and read-only columns — Postgres won't allow updating these
+    const { id: _id, full_name, created_at, updated_at, is_clocked_in, last_clock_in, last_clock_out, ...updateData } = sanitizedForm;
+
+    // 1. Update Employee
+    const { error } = await supabase.from("employees").update(updateData).eq("id", id);
     if (error) return alert(`Error updating: ${error.message}`);
 
     // 2. Upload New Documents
