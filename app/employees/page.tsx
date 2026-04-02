@@ -34,7 +34,7 @@ export default function EmployeesPage() {
     setUserProfile(profile);
 
     // 2. Fetch Employees (ENFORCING SECTION LOCK IF APPLICABLE)
-    let empQuery = supabase.from("employee_summary").select("*").or("is_deleted.eq.false,is_deleted.is.null").order("created_at", { ascending: false });
+    let empQuery = supabase.from("employee_summary").select("*").order("created_at", { ascending: false });
     
     if (profile?.role === "section_manager" && profile?.section_id) {
        // 🔥 THIS IS THE FIX: Section Managers are physically blocked from fetching other sections
