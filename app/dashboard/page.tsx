@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from "@/lib/supabase";
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import { useTranslation } from '@/lib/i18n';
 import TopBar from '@/components/TopBar';
 
 interface SectionData {
@@ -41,9 +42,9 @@ interface DashboardStats {
 }
 
 function getCurrentShift(hour: number) {
-  if (hour >= 6 && hour < 14) return { num: 1, label: 'Morning Shift', time: '06:00 – 14:00' };
-  if (hour >= 14 && hour < 22) return { num: 2, label: 'Afternoon Shift', time: '14:00 – 22:00' };
-  return { num: 3, label: 'Night Shift', time: '22:00 – 06:00' };
+  if (hour >= 8 && hour < 16) return { num: 1, label: 'Morning Shift', time: '08:00 – 16:00' };
+  if (hour >= 16 && hour < 24) return { num: 2, label: 'Afternoon Shift', time: '16:00 – 00:00' };
+  return { num: 3, label: 'Night Shift', time: '00:00 – 08:00' };
 }
 
 function StatCard({
@@ -139,12 +140,13 @@ function LiveBar({ live, total, color }: { live: number; total: number; color: s
           }}
         />
       </div>
-      <div style={{ fontSize: 11, color: '#8b93ad', marginTop: 4 }}>{pct}% on duty</div>
+      <div style={{ fontSize: 11, color: '#8b93ad', marginTop: 4 }}>{pct}% {t('dash.on_duty_pct')}</div>
     </div>
   );
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation();
   
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -247,9 +249,9 @@ export default function DashboardPage() {
   const sadatLive = sadatCity.reduce((sum, s) => sum + (s.clocked_in_count || 0), 0);
 
   const shifts = [
-    { num: 1, label: 'Morning Shift', time: '06:00 – 14:00', active: currentShift.num === 1 },
-    { num: 2, label: 'Afternoon Shift', time: '14:00 – 22:00', active: currentShift.num === 2 },
-    { num: 3, label: 'Night Shift', time: '22:00 – 06:00', active: currentShift.num === 3 },
+    { num: 1, label: t('dash.shift_morning'), time: '08:00 – 16:00', active: currentShift.num === 1 },
+    { num: 2, label: t('dash.shift_afternoon'), time: '16:00 – 00:00', active: currentShift.num === 2 },
+    { num: 3, label: t('dash.shift_night'), time: '00:00 – 08:00', active: currentShift.num === 3 },
   ];
 
   const shiftTotal = stats ? Math.round(stats.totalEmployees / 3) : 0;
@@ -309,10 +311,10 @@ export default function DashboardPage() {
       >
         <div>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: text, margin: 0 }}>
-            NurNil Tekstil — HR Dashboard
+            {t('dash.hr_dashboard')}
           </h1>
           <p style={{ color: muted, fontSize: 13, marginTop: 4, margin: 0 }}>
-            Live overview · Auto-refreshes every 30 seconds
+            {t('dash.live_overview')}
           </p>
         </div>
         <div style={{ textAlign: 'right' }}>
@@ -362,9 +364,9 @@ export default function DashboardPage() {
           marginBottom: 28,
         }}
       >
-        <StatCard label="Total Employees" value={stats?.totalEmployees || 0} icon="👥" color="#3b82f6" />
+        <StatCard label={t('dash.total_employees')} value={stats?.totalEmployees || 0} icon="👥" color="#3b82f6" />
         <StatCard
-          label="On Duty Now"
+          label={t('dash.on_duty')}
           value={stats?.clockedIn || 0}
           sub={`of ${stats?.totalEmployees || 0} total`}
           icon="🟢"
@@ -372,42 +374,42 @@ export default function DashboardPage() {
           href="/attendance"
         />
         <StatCard
-          label="On Leave"
+          label={t('dash.on_leave')}
           value={stats?.onLeave || 0}
           icon="🏖️"
           color="#f59e0b"
           href="/leave"
         />
         <StatCard
-          label="Absent Today"
+          label={t('dash.absent_today')}
           value={stats?.absent || 0}
           icon="🔴"
           color="#ef4444"
           href="/attendance"
         />
         <StatCard
-          label="Late Today"
+          label={t('dash.late_today')}
           value={stats?.lateToday || 0}
           icon="⏰"
           color="#f97316"
           href="/attendance"
         />
         <StatCard
-          label="Pending Approvals"
+          label={t('dash.pending_approvals')}
           value={stats?.pendingApprovals || 0}
           icon="📋"
           color="#a855f7"
           href="/approvals"
         />
         <StatCard
-          label="New This Month"
+          label={t('dash.new_this_month')}
           value={stats?.newThisMonth || 0}
           icon="✨"
           color="#06b6d4"
           href="/employees"
         />
         <StatCard
-          label="Suspended"
+          label={t('dash.suspended')}
           value={stats?.suspended || 0}
           icon="⛔"
           color="#6b7280"
@@ -429,7 +431,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: text }}>📍 Beni Suef</div>
-              <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>Factory Site 1</div>
+              <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>{t('dash.factory_site_1')}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <span style={{ fontSize: 32, fontWeight: 900, color: '#22c55e' }}>{beniSuefLive}</span>
@@ -502,7 +504,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div>
               <div style={{ fontSize: 18, fontWeight: 800, color: text }}>📍 Sadat City</div>
-              <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>Factory Site 2</div>
+              <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>{t('dash.factory_site_2')}</div>
             </div>
             <div style={{ textAlign: 'right' }}>
               <span style={{ fontSize: 32, fontWeight: 900, color: '#3b82f6' }}>{sadatLive}</span>
@@ -612,7 +614,7 @@ export default function DashboardPage() {
               <div style={{ fontSize: 22, marginBottom: 6 }}>
                 {shift.num === 1 ? '🌅' : shift.num === 2 ? '🌤️' : '🌙'}
               </div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: text }}>Shift {shift.num}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: text }}>{t('dash.shift')} {shift.num}</div>
               <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>{shift.label}</div>
               <div
                 style={{
@@ -634,7 +636,7 @@ export default function DashboardPage() {
                 >
                   ~{shift.active ? stats?.clockedIn || shiftTotal : shiftTotal}
                 </span>
-                <span style={{ fontSize: 13, color: muted, marginLeft: 4 }}>/ {shiftTotal} expected</span>
+                <span style={{ fontSize: 13, color: muted, marginLeft: 4 }}>/ {shiftTotal} {t('dash.expected')}</span>
               </div>
             </div>
           ))}
