@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from "@/lib/supabase";
 import Link from 'next/link';
 import Sidebar from '@/components/Sidebar';
+import TopBar from '@/components/TopBar';
 
 interface SectionData {
   section_id: number;
@@ -291,9 +292,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div style={{ marginLeft: 220, paddingTop: 52, minHeight: '100vh', background: bg, fontFamily: 'system-ui, -apple-system, sans-serif', color: text }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: '80px 40px 40px 40px', color: text, overflowY: 'auto', minHeight: '100vh', background: bg }}>
+      <TopBar />
+      <main style={{ padding: '32px 40px' }}>
       {/* ── Header ── */}
       <div
         style={{
