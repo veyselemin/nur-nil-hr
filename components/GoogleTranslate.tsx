@@ -3,10 +3,11 @@ import { useEffect } from "react";
 
 export default function GoogleTranslate() {
   useEffect(() => {
-    const addScript = document.createElement("script");
-    addScript.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
-    addScript.async = true;
-    document.body.appendChild(addScript);
+    // Add Google Translate script
+    const script = document.createElement("script");
+    script.src = "//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit";
+    script.async = true;
+    document.body.appendChild(script);
 
     (window as any).googleTranslateElementInit = function () {
       new (window as any).google.translate.TranslateElement(
@@ -19,16 +20,32 @@ export default function GoogleTranslate() {
         "google_translate_element"
       );
     };
+
+    // Watch for new content added by React and re-trigger translation
+    const observer = new MutationObserver(() => {
+      const iframe = document.querySelector(".goog-te-menu-frame") as HTMLIFrameElement;
+      if (iframe) return; // Already translated, skip
+      const translateFrame = (window as any).google?.translate?.TranslateElement;
+      if (translateFrame) {
+        try {
+          translateFrame.getInstance()?.showBanner();
+        } catch {}
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   return (
     <div
       id="google_translate_element"
       style={{
-        padding: "4px 8px",
-        background: "#1a1f2a",
-        borderRadius: 8,
-        border: "1px solid #252b38",
+        padding: "2px 4px",
       }}
     />
   );
