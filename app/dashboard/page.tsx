@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from "@/lib/supabase";
 import Link from 'next/link';
 
 interface SectionData {
@@ -143,7 +143,7 @@ function LiveBar({ live, total, color }: { live: number; total: number; color: s
 }
 
 export default function DashboardPage() {
-  const supabase = createClientComponentClient();
+  
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentTime, setCurrentTime] = useState(new Date());
