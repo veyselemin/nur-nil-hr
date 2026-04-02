@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { logActivity } from "@/lib/logActivity";
 
 const documentCategories = [
   "Passport / National ID", "Birth Certificate", "Employment Contract", 
@@ -93,9 +94,32 @@ export default function AddEmployeePage() {
           await supabase.from('documents').insert([{
             employee_id: newEmp.id, document_name: doc.file.name, document_type: finalType, file_path: filePath, mime_type: doc.file.type, uploaded_by: user?.id
           }]);
+          await logActivity({
+            userId: user!.id,
+            userName: user!.full_name,
+            userRole: user!.role,
+            actionType: "uploaded_document",
+            entityType: "document",
+            entityName: doc.file.name,
+            description: `${user!.full_name} uploaded document "${doc.file.name}" (${finalType}) for new employee ${form.first_name} ${form.last_name}`,
+            metadata: { employee_id: newEmp.id, document_type: finalType },
+          });
         }
       }
     }
+
+    // Log the new employee addition
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType: "added_employee",
+      entityType: "employee",
+      entityId: newEmp.id,
+      entityName: `${form.first_name} ${form.last_name}`,
+      description: `${user!.full_name} added a new employee: ${form.first_name} ${form.last_name} (${finalPosition}) — ${sections.find(s => String(s.id) === String(form.section_id))?.name || "Unknown Section"}`,
+      metadata: { location: form.location, position: finalPosition, section_id: form.section_id },
+    });
 
     alert("Employee & Documents successfully added!");
     router.push("/employees");

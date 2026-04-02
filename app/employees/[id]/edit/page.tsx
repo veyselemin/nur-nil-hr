@@ -4,6 +4,7 @@ import { useRouter, useParams } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { logActivity } from "@/lib/logActivity";
 
 const documentCategories = ["Passport / National ID", "Birth Certificate", "Employment Contract", "Driving License", "Education Certificate", "Training Document", "Insurance Copy", "Medical Report", "Other"];
 
@@ -12,19 +13,18 @@ export default function EditEmployeePage() {
   const id = params?.id;
   const { user, loading } = useAuth();
   const router = useRouter();
-  
+
   const [sections, setSections] = useState<any[]>([]);
-  const [dbPositions, setDbPositions] = useState<string[]>([]);
   const [form, setForm] = useState<any>(null);
   const [existingDocs, setExistingDocs] = useState<any[]>([]);
-  
+
   // New Documents to add
   const [newDocuments, setNewDocuments] = useState<any[]>([{ type: "", otherSpec: "", file: null }]);
 
   useEffect(() => {
     if (!loading && !user) router.push("/login");
     supabase.from("sections").select("*").then(({ data }) => setSections(data || []));
-    
+
     if (id) {
       supabase.from("employees").select("*").eq("id", id).single().then(({ data }) => { if (data) setForm(data); });
       fetchDocuments();
@@ -32,7 +32,13 @@ export default function EditEmployeePage() {
   }, [id, user, loading, router]);
 
   const fetchDocuments = async () => {
-    const { data } = await supabase.from("documents").select("*").eq("employee_id", id).order("created_at", { ascending: false });
+    // Only show non-deleted documents
+    const { data } = await supabase
+      .from("documents")
+      .select("*")
+      .eq("employee_id", id)
+      .or("is_deleted.eq.false,is_deleted.is.null")
+      .order("created_at", { ascending: false });
     if (data) setExistingDocs(data);
   };
 
@@ -51,12 +57,38 @@ export default function EditEmployeePage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDeleteDoc = async (docId: string, filePath: string) => {
-    if (!confirm("Are you sure you want to permanently delete this document?")) return;
-    await supabase.storage.from("employee-documents").remove([filePath]);
-    const { error } = await supabase.from("documents").delete().eq("id", docId);
-    if (error) alert(error.message);
-    else fetchDocuments();
+  const handleDeleteDoc = async (docId: string, filePath: string, docName: string) => {
+    if (!confirm("Are you sure you want to delete this document?")) return;
+
+    // SOFT DELETE — never erase from database or storage
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("documents")
+      .update({
+        is_deleted: true,
+        deleted_at: now,
+        deleted_by_id: user?.id,
+        deleted_by_name: user?.full_name,
+      })
+      .eq("id", docId);
+
+    if (error) {
+      alert(error.message);
+    } else {
+      // Log the action
+      await logActivity({
+        userId: user!.id,
+        userName: user!.full_name,
+        userRole: user!.role,
+        actionType: "deleted_document",
+        entityType: "document",
+        entityId: docId,
+        entityName: docName,
+        description: `${user!.full_name} deleted document "${docName}" from employee profile (ID: ${id})`,
+        metadata: { file_path: filePath, employee_id: id },
+      });
+      fetchDocuments();
+    }
   };
 
   const handleSubmit = async () => {
@@ -70,7 +102,19 @@ export default function EditEmployeePage() {
     const { error } = await supabase.from("employees").update(updateData).eq("id", id);
     if (error) return alert(`Error updating: ${error.message}`);
 
-    // 2. Upload New Documents
+    // 2. Log the edit
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType: "edited_employee",
+      entityType: "employee",
+      entityId: String(id),
+      entityName: form.full_name || `${form.first_name} ${form.last_name}`,
+      description: `${user!.full_name} edited employee profile: ${form.full_name || form.first_name + " " + form.last_name}`,
+    });
+
+    // 3. Upload New Documents
     const validDocs = newDocuments.filter(d => d.file && d.type);
     if (validDocs.length > 0) {
       for (const doc of validDocs) {
@@ -79,6 +123,17 @@ export default function EditEmployeePage() {
         const { error: uploadErr } = await supabase.storage.from('employee-documents').upload(filePath, doc.file);
         if (!uploadErr) {
           await supabase.from('documents').insert([{ employee_id: id, document_name: doc.file.name, document_type: finalType, file_path: filePath, mime_type: doc.file.type, uploaded_by: user?.id }]);
+          // Log document upload
+          await logActivity({
+            userId: user!.id,
+            userName: user!.full_name,
+            userRole: user!.role,
+            actionType: "uploaded_document",
+            entityType: "document",
+            entityName: doc.file.name,
+            description: `${user!.full_name} uploaded document "${doc.file.name}" (${finalType}) for employee ${form.full_name || form.first_name + " " + form.last_name}`,
+            metadata: { employee_id: id, document_type: finalType },
+          });
         }
       }
     }
@@ -95,7 +150,7 @@ export default function EditEmployeePage() {
       <Sidebar />
       <main style={{ flex: 1, padding: "30px 40px", marginLeft: 240 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 30 }}>Edit: {form.first_name} {form.last_name}</h1>
-        
+
         <div style={{ background: "#13171e", border: "1px solid #252b38", borderRadius: 14, padding: 30, maxWidth: 900 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
             <div><label style={lbl}>First Name</label><input value={form.first_name || ""} onChange={(e)=>setForm({...form, first_name: e.target.value})} style={inp} /></div>
@@ -120,7 +175,7 @@ export default function EditEmployeePage() {
                   </div>
                   <div style={{ display: "flex", gap: 10 }}>
                     <button onClick={() => handleDownload(doc.file_path, doc.document_name)} style={{ padding: "6px 12px", background: "#10b981", color: "#13171e", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Download</button>
-                    <button onClick={() => handleDeleteDoc(doc.id, doc.file_path)} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+                    <button onClick={() => handleDeleteDoc(doc.id, doc.file_path, doc.document_name)} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
                   </div>
                 </div>
               ))}

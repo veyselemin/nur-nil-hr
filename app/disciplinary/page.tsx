@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 import Sidebar from "../../components/Sidebar";
 import { useI18n } from "../../lib/i18n";
+import { logActivity } from "../../lib/logActivity";
 export default function DisciplinaryPage() {
   const { user, loading } = useAuth();
   const { t } = useI18n();
@@ -17,7 +18,30 @@ export default function DisciplinaryPage() {
   useEffect(() => { if (user) { loadRecords(); loadEmployees(); } }, [user]);
   async function loadRecords() { const { data } = await supabase.from("disciplinary_records").select("*, employees(full_name, section_id, sections(name))").order("date", { ascending: false }); if (data) { if (user?.role === "section_manager" && user.section_id) setRecords(data.filter((r: any) => r.employees?.section_id === user.section_id)); else setRecords(data); } }
   async function loadEmployees() { let q = supabase.from("employees").select("id, full_name, section_id").eq("is_approved", true).order("full_name"); if (user?.role === "section_manager" && user.section_id) q = q.eq("section_id", user.section_id); const { data } = await q; if (data) setEmployees(data); }
-  async function submitRecord() { if (!form.employee_id || !form.reason) return; await supabase.from("disciplinary_records").insert({ employee_id: parseInt(form.employee_id), type: form.type, reason: form.reason, description: form.description, witness_names: form.witness_names, reported_by: user?.id, date: new Date().toISOString().split("T")[0] }); setShowAdd(false); setForm({ employee_id: "", type: "verbal_warning", reason: "", description: "", witness_names: "" }); loadRecords(); }
+  async function submitRecord() {
+    if (!form.employee_id || !form.reason) return;
+    const { data: newRecord } = await supabase.from("disciplinary_records").insert({
+      employee_id: parseInt(form.employee_id), type: form.type, reason: form.reason,
+      description: form.description, witness_names: form.witness_names,
+      reported_by: user?.id, date: new Date().toISOString().split("T")[0]
+    }).select().single();
+    const empName = employees.find(e => String(e.id) === String(form.employee_id))?.full_name || "Unknown Employee";
+    const typeLabel = form.type.replace(/_/g, " ");
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType: "added_disciplinary",
+      entityType: "disciplinary_record",
+      entityId: newRecord?.id,
+      entityName: empName,
+      description: `${user!.full_name} issued a ${typeLabel} to ${empName} — Reason: ${form.reason}`,
+      metadata: { type: form.type, reason: form.reason, employee_id: form.employee_id },
+    });
+    setShowAdd(false);
+    setForm({ employee_id: "", type: "verbal_warning", reason: "", description: "", witness_names: "" });
+    loadRecords();
+  }
   if (loading || !user) return null;
   const canAdd = user.role === "admin" || user.role === "hr_manager" || user.role === "section_manager";
   const typeColor: Record<string, string> = { verbal_warning: "#f59e0b", written_warning: "#ef4444", final_warning: "#ef4444", suspension: "#8b5cf6", termination: "#ef4444" };

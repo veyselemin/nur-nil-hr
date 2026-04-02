@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 import Sidebar from "../../components/Sidebar";
 import { useI18n } from "../../lib/i18n";
+import { logActivity } from "../../lib/logActivity";
 export default function LeavePage() {
   const { user, loading } = useAuth();
   const { t } = useI18n();
@@ -16,7 +17,25 @@ export default function LeavePage() {
   useEffect(() => { if (user) { loadEmployees(); loadRequests(); } }, [user]);
   async function loadEmployees() { let q = supabase.from("employees").select("*, sections(name)").eq("is_approved", true).order("full_name"); if (user?.role === "section_manager" && user.section_id) q = q.eq("section_id", user.section_id); const { data } = await q; if (data) setEmployees(data); }
   async function loadRequests() { const { data } = await supabase.from("leave_requests").select("*, employees(full_name, section_id, sections(name))").order("created_at", { ascending: false }); if (data) { if (user?.role === "section_manager" && user.section_id) { setRequests(data.filter((r: any) => r.employees?.section_id === user.section_id)); } else { setRequests(data); } } }
-  async function updateRequest(id: number, status: string) { await supabase.from("leave_requests").update({ status, reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", id); loadRequests(); }
+  async function updateRequest(id: number, status: string, request?: any) {
+    await supabase.from("leave_requests").update({ status, reviewed_by: user?.id, reviewed_at: new Date().toISOString() }).eq("id", id);
+    // Log leave approval/rejection
+    const empName = request?.employees?.full_name || "Unknown Employee";
+    const actionType = status === "approved" ? "approved_leave" : "rejected_leave";
+    const verb = status === "approved" ? "approved" : "rejected";
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType,
+      entityType: "leave_request",
+      entityId: id,
+      entityName: empName,
+      description: `${user!.full_name} ${verb} leave request for ${empName}${request?.leave_type ? ` (${request.leave_type})` : ""}${request?.total_days ? ` — ${request.total_days} days` : ""}`,
+      metadata: { leave_type: request?.leave_type, total_days: request?.total_days },
+    });
+    loadRequests();
+  }
   if (loading || !user) return null;
   const canApprove = user.role === "admin" || user.role === "hr_manager" || user.role === "section_manager";
   const statusColor: Record<string, string> = { approved: "#22c55e", pending: "#f59e0b", rejected: "#ef4444", cancelled: "#8891a4" };
@@ -49,7 +68,7 @@ export default function LeavePage() {
                     <div style={{ fontSize: 12, color: "#8891a4", marginTop: 2 }}>{r.employees?.sections?.name} | {r.start_date} to {r.end_date} ({r.total_days} {t("common.days")})</div>
                     {r.reason && <div style={{ fontSize: 12, color: "#5c6478", marginTop: 4 }}>{r.reason}</div>}
                   </div>
-                  {canApprove && r.status === "pending" && (<div style={{ display: "flex", gap: 8 }}><button onClick={() => updateRequest(r.id, "approved")} style={{ padding: "9px 20px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, color: "#22c55e", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{t("leave.approve")}</button><button onClick={() => updateRequest(r.id, "rejected")} style={{ padding: "9px 20px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: "#ef4444", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{t("leave.reject")}</button></div>)}
+                  {canApprove && r.status === "pending" && (<div style={{ display: "flex", gap: 8 }}><button onClick={() => updateRequest(r.id, "approved", r)} style={{ padding: "9px 20px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 8, color: "#22c55e", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{t("leave.approve")}</button><button onClick={() => updateRequest(r.id, "rejected", r)} style={{ padding: "9px 20px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: "#ef4444", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Outfit, sans-serif" }}>{t("leave.reject")}</button></div>)}
                 </div>
               ))}
             </div>

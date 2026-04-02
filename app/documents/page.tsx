@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { logActivity } from "@/lib/logActivity";
 
 export default function DocumentsPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  
+
   const [documents, setDocuments] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -19,8 +20,12 @@ export default function DocumentsPage() {
   }, [user, loading, router]);
 
   const fetchDocuments = async () => {
-    // Join with employees to get the full name
-    const { data } = await supabase.from("documents").select(`*, employees(full_name, location)`).order("created_at", { ascending: false });
+    // Exclude soft-deleted documents from normal view
+    const { data } = await supabase
+      .from("documents")
+      .select(`*, employees(full_name, location)`)
+      .or("is_deleted.eq.false,is_deleted.is.null")
+      .order("created_at", { ascending: false });
     if (data) setDocuments(data);
   };
 
@@ -36,15 +41,39 @@ export default function DocumentsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleDelete = async (docId: number, filePath: string) => {
-    if (!confirm("Are you sure you want to permanently delete this document?")) return;
-    const { error: storageErr } = await supabase.storage.from("employee-documents").remove([filePath]);
-    if (storageErr) console.warn("Storage delete warning:", storageErr.message);
-    const { error: dbErr } = await supabase.from("documents").delete().eq("id", docId);
+  const handleDelete = async (docId: number, filePath: string, docName: string, employeeName: string) => {
+    if (!confirm("Are you sure you want to delete this document?")) return;
+
+    // SOFT DELETE — mark as deleted, never erase from the database or storage
+    const now = new Date().toISOString();
+    const { error: dbErr } = await supabase
+      .from("documents")
+      .update({
+        is_deleted: true,
+        deleted_at: now,
+        deleted_by_id: user?.id,
+        deleted_by_name: user?.full_name,
+      })
+      .eq("id", docId);
+
     if (dbErr) {
-      console.error("DB delete error:", dbErr);
+      console.error("DB soft-delete error:", dbErr);
       return alert(`Delete failed: ${dbErr.message}`);
     }
+
+    // Log the action
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType: "deleted_document",
+      entityType: "document",
+      entityId: docId,
+      entityName: docName,
+      description: `${user!.full_name} deleted document "${docName}" belonging to ${employeeName}`,
+      metadata: { file_path: filePath, employee_name: employeeName },
+    });
+
     fetchDocuments();
   };
 
@@ -65,7 +94,7 @@ export default function DocumentsPage() {
       <Sidebar />
       <main style={{ flex: 1, padding: "30px 40px", marginLeft: 240 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 30 }}>Company Document Hub</h1>
-        
+
         <div style={{ display: "flex", gap: 15, marginBottom: 20, background: "#13171e", padding: 20, borderRadius: 14, border: "1px solid #252b38" }}>
           <input placeholder="Search file name or employee name..." value={search} onChange={e => setSearch(e.target.value)} style={{ padding: "10px 14px", background: "#1a1f2a", border: "1px solid #252b38", borderRadius: 8, color: "#e8eaf0", outline: "none", flex: 1 }} />
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ padding: "10px", background: "#1a1f2a", border: "1px solid #252b38", borderRadius: 8, color: "#e8eaf0" }}>
@@ -95,7 +124,7 @@ export default function DocumentsPage() {
                   <td style={tdStyle}>
                     <div style={{ display: "flex", gap: 10 }}>
                       <button onClick={() => handleDownload(doc.file_path, doc.document_name)} style={{ padding: "6px 12px", background: "#10b981", color: "#13171e", border: "none", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>Download</button>
-                      <button onClick={() => handleDelete(doc.id, doc.file_path)} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+                      <button onClick={() => handleDelete(doc.id, doc.file_path, doc.document_name, doc.employees?.full_name || "Unknown")} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
                     </div>
                   </td>
                 </tr>

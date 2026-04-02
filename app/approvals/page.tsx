@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 import Sidebar from "../../components/Sidebar";
+import { logActivity } from "../../lib/logActivity";
 
 export default function ApprovalsPage() {
   const { user, loading } = useAuth();
@@ -55,8 +56,22 @@ export default function ApprovalsPage() {
   async function handleApprove(item: any) {
     if (item.type === "leave_request") {
       await supabase.from("leave_requests").update({ status: "approved", reviewed_by: user?.id, reviewed_at: new Date().toISOString(), review_notes: "Approved by " + user?.full_name }).eq("id", item.id);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "approved_leave", entityType: "leave_request", entityId: item.id,
+        entityName: item.employeeName,
+        description: `${user!.full_name} approved leave request for ${item.employeeName} — ${item.description}`,
+        metadata: { section: item.section },
+      });
     } else {
       await supabase.from("employees").update({ is_approved: true, approved_by: user?.id, approved_at: new Date().toISOString() }).eq("id", item.id);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "approved_employee", entityType: "employee", entityId: item.id,
+        entityName: item.employeeName,
+        description: `${user!.full_name} approved new employee registration: ${item.employeeName} (${item.description})`,
+        metadata: { section: item.section, requested_by: item.requestedBy },
+      });
     }
     loadData();
   }
@@ -72,8 +87,22 @@ export default function ApprovalsPage() {
     const fullReason = rejectCategory + (rejectReason ? ": " + rejectReason : "");
     if (rejectModal.type === "leave_request") {
       await supabase.from("leave_requests").update({ status: "rejected", reviewed_by: user?.id, reviewed_at: new Date().toISOString(), review_notes: fullReason }).eq("id", rejectModal.id);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "rejected_leave", entityType: "leave_request", entityId: rejectModal.id,
+        entityName: rejectModal.employeeName,
+        description: `${user!.full_name} rejected leave request for ${rejectModal.employeeName} — Reason: ${fullReason}`,
+        metadata: { reason: fullReason },
+      });
     } else {
       await supabase.from("employees").update({ status: "terminated", is_approved: false }).eq("id", rejectModal.id);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "rejected_employee", entityType: "employee", entityId: rejectModal.id,
+        entityName: rejectModal.employeeName,
+        description: `${user!.full_name} rejected new employee registration for ${rejectModal.employeeName} — Reason: ${fullReason}`,
+        metadata: { reason: fullReason },
+      });
     }
     setRejectModal(null);
     setRejectReason("");

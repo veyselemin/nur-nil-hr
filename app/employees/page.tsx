@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { logActivity } from "@/lib/logActivity";
 
 export default function EmployeesPage() {
   const { user, loading } = useAuth();
@@ -33,7 +34,7 @@ export default function EmployeesPage() {
     setUserProfile(profile);
 
     // 2. Fetch Employees (ENFORCING SECTION LOCK IF APPLICABLE)
-    let empQuery = supabase.from("employee_summary").select("*").order("created_at", { ascending: false });
+    let empQuery = supabase.from("employee_summary").select("*").or("is_deleted.eq.false,is_deleted.is.null").order("created_at", { ascending: false });
     
     if (profile?.role === "section_manager" && profile?.section_id) {
        // 🔥 THIS IS THE FIX: Section Managers are physically blocked from fetching other sections
@@ -64,12 +65,38 @@ export default function EmployeesPage() {
     setFilteredEmployees(result);
   }, [search, locationFilter, sectionFilter, employees]);
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (empId: string, empName: string) => {
     if (!userProfile?.permissions?.can_delete_employees) return alert("Access Denied: You do not have permission to delete employees.");
-    if (!confirm("Are you sure you want to delete this employee?")) return;
-    const { error } = await supabase.from("employees").delete().eq("id", id);
-    if (error) alert(`Error: ${error.message}`);
-    else loadFullProfileAndData();
+    if (!confirm(`Are you sure you want to delete ${empName}? An admin can always restore them later.`)) return;
+
+    // SOFT DELETE — the employee is hidden from normal view but never truly removed
+    const now = new Date().toISOString();
+    const { error } = await supabase
+      .from("employees")
+      .update({
+        is_deleted: true,
+        deleted_at: now,
+        deleted_by_id: userProfile.id,
+        deleted_by_name: userProfile.full_name,
+        status: "terminated",
+      })
+      .eq("id", empId);
+
+    if (error) {
+      alert(`Error: ${error.message}`);
+    } else {
+      await logActivity({
+        userId: userProfile.id,
+        userName: userProfile.full_name,
+        userRole: userProfile.role,
+        actionType: "deleted_employee",
+        entityType: "employee",
+        entityId: empId,
+        entityName: empName,
+        description: `${userProfile.full_name} deleted employee: ${empName} (record moved to admin vault, restorable)`,
+      });
+      loadFullProfileAndData();
+    }
   };
 
   if (loading || !userProfile) return <div style={{background: "#0c0f14", height: "100vh"}}></div>;
@@ -149,7 +176,7 @@ export default function EmployeesPage() {
                         
                         {/* ENFORCING DELETE LOCK */}
                         {canDelete && (
-                           <button onClick={() => handleDelete(emp.id)} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
+                           <button onClick={() => handleDelete(emp.id, emp.full_name)} style={{ padding: "6px 12px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Delete</button>
                         )}
                       </div>
                     </td>

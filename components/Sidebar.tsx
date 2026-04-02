@@ -33,6 +33,7 @@ export default function Sidebar() {
     { href: "/payroll", label: t("nav.payroll") },
     { href: "/sections", label: t("nav.sections") },
     ...( ["admin","hr_manager"].includes(user.role) ? [{ href: "/approvals", label: t("nav.approvals") }] : []),
+    ...( user.role === "admin" ? [{ href: "/activity", label: "Activity Monitor" }] : []),
     ...( user.role === "admin" ? [{ href: "/settings", label: t("nav.settings") }] : []),
   ];
 

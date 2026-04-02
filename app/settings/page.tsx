@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import Sidebar from "@/components/Sidebar";
+import { logActivity } from "@/lib/logActivity";
 
 export default function SettingsPage() {
   const { user, loading } = useAuth();
@@ -51,6 +52,13 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "created_user", entityType: "user",
+        entityName: newUser.full_name,
+        description: `${user!.full_name} created a new system user: ${newUser.full_name} (${newUser.email}) with role: ${newUser.role}`,
+        metadata: { role: newUser.role, email: newUser.email },
+      });
       alert("System User created successfully!");
       setNewUser({ full_name: "", email: "", password: "", role: "hr_employee", section_id: "" });
       fetchData();
@@ -71,6 +79,12 @@ export default function SettingsPage() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "deleted_user", entityType: "user",
+        entityId: id, entityName: name,
+        description: `${user!.full_name} deleted system user account: ${name}`,
+      });
       alert("User deleted successfully.");
       fetchData();
     } catch (err: any) {
@@ -89,6 +103,13 @@ export default function SettingsPage() {
     if (error) {
       alert(`Error saving access: ${error.message}`);
     } else {
+      await logActivity({
+        userId: user!.id, userName: user!.full_name, userRole: user!.role,
+        actionType: "updated_permissions", entityType: "user",
+        entityId: editingProfile.id, entityName: editingProfile.full_name,
+        description: `${user!.full_name} updated permissions for ${editingProfile.full_name} — new role: ${editingProfile.role}`,
+        metadata: { new_role: editingProfile.role, permissions: editingProfile.permissions },
+      });
       alert("Granular permissions updated securely!");
       setEditingProfile(null);
       fetchData();

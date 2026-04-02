@@ -5,6 +5,7 @@ import { useAuth } from "../../lib/auth";
 import { supabase } from "../../lib/supabase";
 import Sidebar from "../../components/Sidebar";
 import { useI18n } from "../../lib/i18n";
+import { logActivity } from "../../lib/logActivity";
 export default function AttendancePage() {
   const { user, loading } = useAuth();
   const { t, lang } = useI18n();
@@ -20,7 +21,22 @@ export default function AttendancePage() {
     const { data } = await q;
     if (data) { setEmployees(data); const m: Record<string, any> = {}; data.forEach((e: any) => { const sn = e.sections?.name || "Unknown"; if (!m[sn]) m[sn] = { name: sn, total: 0, clockedIn: 0, onLeave: 0, absent: 0 }; m[sn].total++; if (e.is_clocked_in) m[sn].clockedIn++; if (e.status === "on_leave") m[sn].onLeave++; if (e.status === "absent") m[sn].absent++; }); setSections(Object.values(m)); }
   }
-  async function toggleClock(emp: any) { const newVal = !emp.is_clocked_in; await supabase.from("employees").update({ is_clocked_in: newVal }).eq("id", emp.id); loadData(); }
+  async function toggleClock(emp: any) {
+    const newVal = !emp.is_clocked_in;
+    await supabase.from("employees").update({ is_clocked_in: newVal }).eq("id", emp.id);
+    await logActivity({
+      userId: user!.id,
+      userName: user!.full_name,
+      userRole: user!.role,
+      actionType: newVal ? "clock_in" : "clock_out",
+      entityType: "attendance",
+      entityId: emp.id,
+      entityName: emp.full_name,
+      description: `${user!.full_name} clocked ${newVal ? "IN" : "OUT"} employee: ${emp.full_name} (${emp.sections?.name || "Unknown Section"})`,
+      metadata: { section: emp.sections?.name },
+    });
+    loadData();
+  }
   if (loading || !user) return null;
   const ci = employees.filter((e) => e.is_clocked_in).length;
   const nci = employees.filter((e) => !e.is_clocked_in && e.status === "active").length;
