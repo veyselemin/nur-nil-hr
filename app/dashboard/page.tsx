@@ -140,7 +140,7 @@ function LiveBar({ live, total, color }: { live: number; total: number; color: s
           }}
         />
       </div>
-      <div style={{ fontSize: 11, color: '#8b93ad', marginTop: 4 }}>{pct}% {t('dash.on_duty_pct')}</div>
+      <div style={{ fontSize: 11, color: '#8b93ad', marginTop: 4 }}>{pct}% on duty</div>
     </div>
   );
 }
