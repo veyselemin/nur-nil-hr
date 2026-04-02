@@ -293,7 +293,7 @@ export default function DashboardPage() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: bg, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: '28px 40px', color: text, overflowY: 'auto', minHeight: '100vh', background: bg }}>
+      <main style={{ flex: 1, padding: '80px 40px 40px 40px', color: text, overflowY: 'auto', minHeight: '100vh', background: bg }}>
       {/* ── Header ── */}
       <div
         style={{
